@@ -1,0 +1,14 @@
+{
+  // 在 Node 上跑、用 wrangler 啟動 Worker 的整合測試
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "lib": ["es2023", "dom"],
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["test/worker.test.ts", "vitest.config.ts"]
+}

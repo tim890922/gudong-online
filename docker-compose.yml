@@ -1,0 +1,26 @@
+services:
+  app:
+    build: .
+    image: gudong-online:latest
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      ROOM_TTL_HOURS: ${ROOM_TTL_HOURS:-12}
+    volumes:
+      - gudong-data:/data
+
+  # 用 Cloudflare Tunnel 對外公開：docker compose --profile tunnel up -d
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    depends_on:
+      - app
+
+volumes:
+  gudong-data:

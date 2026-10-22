@@ -1,0 +1,11 @@
+{
+  "name": "古董局中局",
+  "short_name": "古董局中局",
+  "description": "古董局中局桌遊輔助：每人用自己的手機鑑寶、發技能、投票",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1C1B19",
+  "theme_color": "#1C1B19",
+  "lang": "zh-Hant-TW",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

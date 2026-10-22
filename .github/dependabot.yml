@@ -1,0 +1,26 @@
+version: 2
+updates:
+  # workflow 裡的 action 都釘在 commit SHA，靠 Dependabot 更新
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: npm
+    directories: [/frontend, /cloudflare]
+    schedule:
+      interval: monthly
+    groups:
+      npm:
+        patterns: ['*']
+
+  - package-ecosystem: uv
+    directory: /backend
+    schedule:
+      interval: monthly
+    groups:
+      python:
+        patterns: ['*']

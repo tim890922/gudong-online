@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gudong-online",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+
+  // 前端 build 的結果；/api 和 /ws 先交給 Worker，其餘路徑找不到檔案時回 index.html
+  "assets": {
+    "directory": "../frontend/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/ws/*"]
+  },
+
+  // 一個房間一個 Durable Object（SQLite 版，免費方案可用）
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "GameRoom" }]
+  },
+  "exports": {
+    "GameRoom": { "type": "durable-object", "storage": "sqlite" }
+  },
+
+  "vars": {
+    // 對外網址：用來產生邀請連結和 QR code。留空時使用瀏覽器目前的網址。
+    "PUBLIC_BASE_URL": "",
+    // 房間閒置多久後清除（小時）
+    "ROOM_TTL_HOURS": "12"
+  }
+}

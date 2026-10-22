@@ -9,13 +9,18 @@ updates:
       actions:
         patterns: ['*']
 
+  # 小版本合成一個 PR；大版本各自開 PR，方便個別評估相容性
   - package-ecosystem: npm
     directories: [/frontend, /cloudflare]
     schedule:
       interval: monthly
     groups:
       npm:
-        patterns: ['*']
+        update-types: [minor, patch]
+    ignore:
+      # 跟著執行環境 Node 22，不跳大版本
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: uv
     directory: /backend
@@ -23,4 +28,4 @@ updates:
       interval: monthly
     groups:
       python:
-        patterns: ['*']
+        update-types: [minor, patch]

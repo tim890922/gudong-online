@@ -1,15 +1,17 @@
 <script setup lang="ts">
+import { Share } from '@capacitor/share'
 import { Copy, QrCode, Share2 } from 'lucide-vue-next'
 import QRCode from 'qrcode'
 import { computed, ref, watchEffect } from 'vue'
+import { isNative, webOrigin } from '../../lib/platform'
 import { useRoomStore } from '../../stores/room'
 
 const store = useRoomStore()
 const showQr = ref(true)
 const qr = ref('')
 const code = computed(() => store.view?.code ?? '')
-const link = computed(() => `${store.publicBaseUrl || location.origin}/r/${code.value}`)
-const canShare = typeof navigator.share === 'function'
+const link = computed(() => `${webOrigin(store.publicBaseUrl)}/r/${code.value}`)
+const canShare = isNative || typeof navigator.share === 'function'
 
 watchEffect(async () => {
   if (!code.value) return
@@ -21,8 +23,11 @@ watchEffect(async () => {
 })
 
 async function share() {
+  const data = { title: '古董局中局', text: `房號 ${code.value}，一起來鑑寶`, url: link.value }
   try {
-    await navigator.share({ title: '古董局中局', text: `房號 ${code.value}，一起來鑑寶`, url: link.value })
+    // Android 的 WebView 沒有 navigator.share，App 一律走原生分享
+    if (isNative) await Share.share(data)
+    else await navigator.share(data)
   } catch {
     /* 使用者取消分享 */
   }

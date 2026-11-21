@@ -13,12 +13,14 @@
 - **鑑寶投票**：房主輸入總票數，或每人線上投籌碼（公開誰投給誰）
 - **粉絲角色**：大眼賊、藥來、劉局、魔藥不然
 - 輪到你時手機震動、遊戲中螢幕保持常亮（需 HTTPS）、可加到主畫面
+- **iOS／Android App**：同一份前端用 Capacitor 包成 App，連同一個伺服器，App 和網頁的玩家可以在同一房；App 多了掃 QR code 加入
 
 ## 技術
 
 | | |
 |---|---|
 | 前端 | Vue 3、Vite、TypeScript、Pinia、Vue Router、Tailwind CSS v4 |
+| App | Capacitor 8（iOS、Android），原生功能：震動、螢幕常亮、分享、掃 QR code |
 | 後端（線上版） | Cloudflare Workers ＋ Durable Objects（TypeScript、WebSocket hibernation、SQLite storage） |
 | 後端（自架版） | Python 3.13、FastAPI、uvicorn（原生 WebSocket）、SQLite |
 | 套件管理 | npm、uv（Python 虛擬環境） |
@@ -38,9 +40,12 @@ backend/app/
   api.py       REST：建房、加入、房間摘要、靜態資料
   main.py      FastAPI app、WebSocket 端點、SPA fallback
 frontend/src/
-  views/       首頁、房間頁、規則頁
+  views/       首頁、房間頁、規則頁、隱私權政策
   components/  大廳、各遊戲階段畫面、共用元件
   stores/room.ts  WebSocket 連線（自動重連＋心跳）與伺服器狀態
+  lib/platform.ts 網頁版和 App 版的差異：API 網址、回到前景
+frontend/ios/、frontend/android/  Capacitor 產生的原生專案
+frontend/scripts/icons.mjs        產生圖示與啟動畫面
 ```
 
 ## 本機開發
@@ -111,7 +116,25 @@ npx wrangler tail                         # 看即時 log
 
 - 免費方案每天 10 萬次請求，Durable Object 另有每天 10 萬次寫入的額度。一局大約幾百次，同時開很多桌也用不完。前端的心跳由 Cloudflare 直接回覆，不吵醒 Durable Object，也不算額度。
 - 房間閒置 12 小時（`wrangler.jsonc` 的 `ROOM_TTL_HOURS`）後由 alarm 清除。重新部署不會影響進行中的房間，連線會自動重連。
-- 要用自己的網域時，在 Cloudflare 後台幫 Worker 加 Custom Domain，並把 `PUBLIC_BASE_URL` 設成那個網址（影響邀請連結和 QR code）。
+- 要用自己的網域時，在 Cloudflare 後台幫 Worker 加 Custom Domain，並把 `PUBLIC_BASE_URL` 設成那個網址（影響邀請連結和 QR code）。App 版的 `frontend/.env.app` 也要一起改。
+
+## App 版（iOS／Android）
+
+App 的頁面打包在手機裡，API 和 WebSocket 連到 `frontend/.env.app` 的 `VITE_API_BASE`（線上的 Worker）。Worker 只對 App 的來源（`capacitor://localhost`、`https://localhost`）開放 CORS；Python 自架版沒有，App 只連線上版。
+
+```bash
+cd frontend
+npm run cap:sync        # build 成 dist-app/ 並複製到 ios/、android/
+npx cap open android    # 用 Android Studio 開（需要 JDK 21、Android SDK）
+npx cap open ios        # 用 Xcode 開（只能在 macOS）
+npm run icons           # 改了圖示設計後重新產生所有尺寸
+```
+
+沒有 Mac 也沒關係：`.github/workflows/mobile.yml` 會在 GitHub 的 macOS runner 上編譯 iOS，Android 則產出 debug APK（在 Actions 的 artifact 下載），可以直接裝到手機上測試。
+
+- Bundle ID／applicationId 是 `com.tim890922.gudong`（`capacitor.config.ts`），**第一次上傳到商店後就不能改**。
+- 隱私權政策在 `/privacy`，兩個商店都要填這個網址。
+- 簽章與上傳（TestFlight、Google Play）需要開發者帳號，帳號申請好之後再加進 workflow。
 
 ## 自架：用 Docker 跑 Python 版
 

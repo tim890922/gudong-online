@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">古董局中局</string>
+    <string name="title_activity_main">古董局中局</string>
+    <string name="package_name">com.tim890922.gudong</string>
+    <string name="custom_url_scheme">com.tim890922.gudong</string>
+</resources>

@@ -5,7 +5,7 @@ const store = useRoomStore()
 </script>
 
 <template>
-  <div class="pointer-events-none fixed inset-x-0 top-3 z-[60] flex flex-col items-center gap-2 px-4" aria-live="polite">
+  <div class="pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+0.75rem)] z-[60] flex flex-col items-center gap-2 px-4" aria-live="polite">
     <TransitionGroup
       enter-from-class="-translate-y-2 opacity-0"
       leave-to-class="opacity-0"

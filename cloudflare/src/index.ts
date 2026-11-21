@@ -24,14 +24,43 @@ const CODE_LENGTH = 4
 const CODE_PATTERN = new RegExp(`^[${ROOM_ALPHABET}]{${CODE_LENGTH}}$`)
 const CLOSE_UNKNOWN = 4004
 
+// iOS／Android App 的頁面來源（Capacitor 的預設值）。WebSocket 不受 CORS 限制，只有 REST 需要。
+const APP_ORIGINS = new Set(['capacitor://localhost', 'https://localhost'])
+
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url)
     if (url.pathname.startsWith('/ws/')) return socket(request, env, url.pathname.slice(4))
-    if (url.pathname.startsWith('/api/')) return api(request, env, url.pathname.slice(5))
+    if (url.pathname.startsWith('/api/')) return withCors(request, () => api(request, env, url.pathname.slice(5)))
     return env.ASSETS.fetch(request)
   },
 } satisfies ExportedHandler<Env>
+
+// ---------------------------------------------------------------- CORS
+
+/** 只對 App 的來源開放跨來源呼叫；網頁版是同一個網域，其他網站照舊被瀏覽器擋下。 */
+async function withCors(request: Request, handler: () => Promise<Response>): Promise<Response> {
+  const origin = request.headers.get('Origin')
+  if (origin === null || !APP_ORIGINS.has(origin)) return handler()
+
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Methods': 'GET, POST',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Max-Age': '86400',
+        Vary: 'Origin',
+      },
+    })
+  }
+  const response = await handler()
+  const headers = new Headers(response.headers)
+  headers.set('Access-Control-Allow-Origin', origin)
+  headers.append('Vary', 'Origin')
+  return new Response(response.body, { status: response.status, headers })
+}
 
 // ---------------------------------------------------------------- REST
 

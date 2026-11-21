@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { ScanLine } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppButton from '../components/ui/AppButton.vue'
 import { api } from '../lib/api'
 import { lastRoom, savedName, saveCredentials } from '../lib/credentials'
+import { isNative } from '../lib/platform'
 import { useRoomStore } from '../stores/room'
 
 const router = useRouter()
@@ -44,6 +46,33 @@ function join() {
   if (!codeOk.value) return store.toast('房號是 4 個字')
   if (nameOk.value) savedName.set(name.value.trim())
   router.push(`/r/${code.value}`)
+}
+
+/** 從 QR code 的內容取出房號：邀請連結（…/r/ABCD）或直接是 4 碼房號 */
+function codeFromQr(text: string): string | null {
+  const value = text.trim()
+  const m = value.match(/\/r\/([A-Za-z0-9]{4})(?:[/?#]|$)/) ?? value.match(/^([A-Za-z0-9]{4})$/)
+  return m ? m[1].toUpperCase() : null
+}
+
+// 只有 App 版有：網頁版用手機內建的相機掃就會開啟邀請連結
+async function scan() {
+  // 掃描器只在 App 裡用得到，按下去才載入，網頁版不會多下載
+  const { CapacitorBarcodeScanner, CapacitorBarcodeScannerTypeHint } = await import('@capacitor/barcode-scanner')
+  let text: string
+  try {
+    const result = await CapacitorBarcodeScanner.scanBarcode({
+      hint: CapacitorBarcodeScannerTypeHint.QR_CODE,
+      scanInstructions: '對準房主手機上的 QR code',
+    })
+    text = result.ScanResult
+  } catch {
+    return // 取消掃描，或沒有給相機權限
+  }
+  const found = codeFromQr(text)
+  if (!found) return store.toast('這不是房間的 QR code')
+  code.value = found
+  join()
 }
 
 // 首頁的主角是十二件獸首本身
@@ -107,6 +136,9 @@ const ZODIAC = ['鼠', '牛', '虎', '兔', '龍', '蛇', '馬', '羊', '猴', '
         />
       </label>
       <AppButton class="mt-3" variant="secondary" block :disabled="!codeOk" @click="join">加入房間</AppButton>
+      <AppButton v-if="isNative" class="mt-2" variant="ghost" block @click="scan">
+        <ScanLine :size="20" /> 掃描 QR code 加入
+      </AppButton>
     </section>
 
     <RouterLink to="/rules" class="mt-8 block text-center text-gilt underline-offset-4 hover:underline">規則速查</RouterLink>
@@ -114,5 +146,6 @@ const ZODIAC = ['鼠', '牛', '虎', '兔', '龍', '蛇', '馬', '羊', '猴', '
       粉絲製作的桌遊輔助工具，與官方無關。規則參考自
       <a class="underline" href="https://github.com/pride829/gudong" target="_blank" rel="noopener">pride829/gudong</a>。
     </p>
+    <RouterLink to="/privacy" class="mt-2 block text-center text-xs text-mist/70 underline">隱私權政策</RouterLink>
   </main>
 </template>

@@ -32,6 +32,17 @@
     min-height: 100dvh;
     background: var(--color-ink);
     overflow-x: clip;
+    /* App 的畫面會延伸到瀏海與狀態列底下（viewport-fit=cover）；一般瀏覽器分頁這個值是 0 */
+    padding-top: env(safe-area-inset-top);
+  }
+  /* 狀態列那一條固定鋪底色，捲動的內容不會從狀態列的字後面透出來 */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0 0 auto;
+    height: env(safe-area-inset-top);
+    background: var(--color-ink);
+    z-index: 70;
   }
   button {
     cursor: pointer;

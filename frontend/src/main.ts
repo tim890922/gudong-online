@@ -2,6 +2,7 @@ import { createPinia } from 'pinia'
 import { createApp } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
 import App from './App.vue'
+import { initNative } from './lib/platform'
 import './style.css'
 import HomeView from './views/HomeView.vue'
 
@@ -11,8 +12,10 @@ const router = createRouter({
     { path: '/', component: HomeView },
     { path: '/r/:code([A-Za-z0-9]{4})', component: () => import('./views/RoomView.vue') },
     { path: '/rules', component: () => import('./views/RulesView.vue') },
+    { path: '/privacy', component: () => import('./views/PrivacyView.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })
 
+initNative()
 createApp(App).use(createPinia()).use(router).mount('#app')

@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { api } from '../lib/api'
 import { clearCredentials } from '../lib/credentials'
 import { onForeground, wsUrl } from '../lib/platform'
-import type { Credentials, Meta, PlayerView, RoomView } from '../lib/types'
+import type { ChatMessage, Credentials, Meta, PlayerView, RoomView } from '../lib/types'
 
 type Status = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'removed'
 
@@ -15,6 +15,7 @@ interface Toast {
 
 const PING_MS = 25_000 // Cloudflare 會切斷閒置約 100 秒的 WebSocket
 const MAX_RETRY_MS = 10_000
+const CHAT_KEEP = 100 // 和伺服器保留的則數一樣
 
 export const useRoomStore = defineStore('room', () => {
   const view = ref<RoomView | null>(null)
@@ -23,6 +24,10 @@ export const useRoomStore = defineStore('room', () => {
   const status = ref<Status>('idle')
   const removedMessage = ref('')
   const toasts = ref<Toast[]>([])
+  const chat = ref<ChatMessage[]>([])
+  const chatUnread = ref(0)
+  /** 聊天室正開著（由房間頁設定）；開著的時候新訊息不算未讀 */
+  const chatVisible = ref(false)
 
   let socket: WebSocket | null = null
   let cred: Credentials | null = null
@@ -65,6 +70,8 @@ export const useRoomStore = defineStore('room', () => {
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data)
       if (msg.type === 'state') view.value = msg.view
+      else if (msg.type === 'chat') receiveChat([msg.message])
+      else if (msg.type === 'chat_history') receiveChat(msg.messages, true)
       else if (msg.type === 'error') toast(msg.message)
       else if (msg.type === 'removed') {
         status.value = 'removed'
@@ -103,6 +110,8 @@ export const useRoomStore = defineStore('room', () => {
     ws?.close()
     view.value = null
     status.value = 'idle'
+    chat.value = []
+    chatUnread.value = 0
   }
 
   function send(action: Record<string, unknown>) {
@@ -111,6 +120,32 @@ export const useRoomStore = defineStore('room', () => {
       return
     }
     socket.send(JSON.stringify({ type: 'action', action }))
+  }
+
+  /**
+   * 收到聊天訊息。history 是連線時伺服器補送的完整紀錄：直接取代，
+   * 只把斷線期間新增的別人訊息算成未讀（剛打開頁面時不算）。
+   */
+  function receiveChat(messages: ChatMessage[], history = false) {
+    const lastId = chat.value.at(-1)?.id ?? 0
+    const fresh = history && lastId === 0 ? [] : messages.filter((m) => m.id > lastId && m.player_id !== myId.value)
+    chat.value = history ? messages : [...chat.value, ...messages.filter((m) => m.id > lastId)].slice(-CHAT_KEEP)
+    if (!chatVisible.value) chatUnread.value += fresh.length
+  }
+
+  /** 送出聊天訊息；連線中斷時回傳 false，讓輸入框保留內容 */
+  function sendChat(text: string): boolean {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      toast('連線中斷，正在重新連線，請稍後再送一次')
+      return false
+    }
+    socket.send(JSON.stringify({ type: 'chat', text }))
+    return true
+  }
+
+  function setChatVisible(visible: boolean) {
+    chatVisible.value = visible
+    if (visible) chatUnread.value = 0
   }
 
   // 手機從背景回來時立刻重連，不等退避計時器
@@ -150,11 +185,15 @@ export const useRoomStore = defineStore('room', () => {
     status,
     removedMessage,
     toasts,
+    chat,
+    chatUnread,
     loadMeta,
     toast,
     connect,
     disconnect,
     send,
+    sendChat,
+    setChatVisible,
     game,
     me,
     myId,

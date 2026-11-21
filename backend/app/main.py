@@ -47,6 +47,9 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         lr, pid = joined
         await manager.broadcast(lr)
         try:
+            history = manager.chat_history(lr)
+            if history is not None:
+                await ws.send_text(json.dumps(history, ensure_ascii=False))
             while True:
                 try:
                     msg = json.loads(await ws.receive_text())
@@ -56,8 +59,11 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
                     continue
                 if msg.get("type") == "ping":
                     await ws.send_text('{"type":"pong"}')
-                elif msg.get("type") == "action":
-                    error = await manager.handle(lr, pid, msg.get("action"))
+                elif msg.get("type") in ("action", "chat"):
+                    if msg["type"] == "action":
+                        error = await manager.handle(lr, pid, msg.get("action"))
+                    else:
+                        error = await manager.post_chat(lr, pid, msg.get("text"))
                     if error:
                         await ws.send_text(json.dumps(
                             {"type": "error", "message": error}, ensure_ascii=False))

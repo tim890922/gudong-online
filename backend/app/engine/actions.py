@@ -17,6 +17,11 @@ class UpdateSettings(BaseModel):
     settings: Settings
 
 
+class SetChat(BaseModel):
+    type: Literal["set_chat"]
+    enabled: bool
+
+
 class Kick(BaseModel):
     type: Literal["kick"]
     player_id: str
@@ -105,6 +110,7 @@ class AbortGame(BaseModel):
 Action = Annotated[
     SetProfile
     | UpdateSettings
+    | SetChat
     | Kick
     | TransferHost
     | Leave

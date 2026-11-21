@@ -6,11 +6,11 @@
  */
 
 import { DurableObject } from 'cloudflare:workers'
-import { isObject, parseAction } from './engine/actions'
+import { charLength, isObject, parseAction } from './engine/actions'
 import { COLORS, MAX_PLAYERS } from './engine/constants'
 import { GameError } from './engine/errors'
 import { applyAction } from './engine/game'
-import { defaultSettings, findPlayer, playerByToken, type PlayerInfo, type Room } from './engine/models'
+import { chatOpen, defaultSettings, findPlayer, playerByToken, type PlayerInfo, type Room } from './engine/models'
 import { cryptoRng } from './engine/rng'
 import { buildView } from './engine/views'
 
@@ -19,6 +19,30 @@ const CLOSE_UNKNOWN = 4004
 // 前端每 25 秒送一次，由 runtime 直接回覆，不會喚醒物件
 const PING = '{"type":"ping"}'
 const PONG = '{"type":"pong"}'
+
+export const CHAT_KEEP = 100 // 每房只保留最近幾則
+export const CHAT_MAX_CHARS = 200
+export const CHAT_BURST = 5 // 每人在 CHAT_WINDOW_MS 內最多幾則
+const CHAT_WINDOW_MS = 10_000
+
+/** 聊天訊息。名字和顏色存發言當下的，之後改名或離開都不影響舊訊息。 */
+export interface ChatMessage {
+  id: number
+  player_id: string
+  name: string
+  color: number | null
+  text: string
+  ts: number
+}
+
+/** 聊天只有一行：空白縮成一格，去掉控制字元和會反轉文字方向的字元（防止偽造顯示） */
+export function cleanChat(raw: unknown): string {
+  if (typeof raw !== 'string') return ''
+  return raw
+    .replace(/\s+/g, ' ')
+    .replace(/[\u0000-\u001f\u007f‎‏‪-‮⁦-⁩]/g, '')
+    .trim()
+}
 
 export interface Credentials {
   code: string
@@ -38,6 +62,9 @@ export type JoinResult = Credentials | { status: 404 | 409; detail: string }
 
 export class GameRoom extends DurableObject<Env> {
   private room: Room | null = null
+  private chat: ChatMessage[] = []
+  // 每人最近的發言時間，用來擋洗版；物件休眠後歸零也沒關係
+  private recentChats = new Map<string, number[]>()
   private alarmSet = false
   private readonly ttlMs: number
 
@@ -47,6 +74,8 @@ export class GameRoom extends DurableObject<Env> {
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(PING, PONG))
     void ctx.blockConcurrencyWhile(async () => {
       this.room = (await ctx.storage.get<Room>('room')) ?? null
+      // 聊天和房間分開存：發言不必重寫整個房間
+      this.chat = (await ctx.storage.get<ChatMessage[]>('chat')) ?? []
       this.alarmSet = (await ctx.storage.getAlarm()) !== null
     })
   }
@@ -58,6 +87,9 @@ export class GameRoom extends DurableObject<Env> {
     if (this.current()) return null
     // 同房號的舊房間已過期：把還連著的人請出去
     for (const ws of this.ctx.getWebSockets()) closeWith(ws, '房間已過期', CLOSE_REMOVED)
+    this.chat = []
+    this.recentChats.clear()
+    await this.ctx.storage.delete('chat')
     const now = Date.now()
     const player = newPlayer(name, null)
     await this.save({
@@ -113,6 +145,8 @@ export class GameRoom extends DurableObject<Env> {
       // tag 記錄這條連線屬於哪位玩家，休眠後也查得到
       this.ctx.acceptWebSocket(server, [player.id])
       this.broadcast()
+      // 遠端房間：補上聊天紀錄（重新連線時用來對齊漏掉的訊息）
+      if (room!.settings.remote) server.send(JSON.stringify({ type: 'chat_history', messages: this.chat }))
     } else {
       server.accept()
       closeWith(server, '房間不存在或身分已失效', CLOSE_UNKNOWN)
@@ -135,7 +169,40 @@ export class GameRoom extends DurableObject<Env> {
     } else if (msg.type === 'action') {
       const error = await this.handle(pid, msg.action)
       if (error) ws.send(JSON.stringify({ type: 'error', message: error }))
+    } else if (msg.type === 'chat') {
+      const error = await this.postChat(pid, msg.text)
+      if (error) ws.send(JSON.stringify({ type: 'error', message: error }))
     }
+  }
+
+  /** 發一則聊天訊息，回傳錯誤訊息（成功則為 null）。 */
+  private async postChat(pid: string, raw: unknown): Promise<string | null> {
+    const room = this.current()
+    const player = room ? findPlayer(room, pid) : undefined
+    if (!room || !player) return '你已經不在這個房間'
+    if (!chatOpen(room.settings)) return '聊天室沒有開放'
+    const text = cleanChat(raw)
+    if (!text) return '訊息不能是空白'
+    if (charLength(text) > CHAT_MAX_CHARS) return `訊息最多 ${CHAT_MAX_CHARS} 個字`
+
+    const now = Date.now()
+    const recent = (this.recentChats.get(pid) ?? []).filter((t) => now - t < CHAT_WINDOW_MS)
+    if (recent.length >= CHAT_BURST) return '訊息太頻繁，請稍等一下'
+    recent.push(now)
+    this.recentChats.set(pid, recent)
+
+    const message: ChatMessage = {
+      id: (this.chat.at(-1)?.id ?? 0) + 1,
+      player_id: pid,
+      name: player.name,
+      color: player.color,
+      text,
+      ts: now,
+    }
+    this.chat = [...this.chat, message].slice(-CHAT_KEEP)
+    await this.ctx.storage.put('chat', this.chat)
+    this.sendAll(JSON.stringify({ type: 'chat', message }))
+    return null
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
@@ -197,6 +264,18 @@ export class GameRoom extends DurableObject<Env> {
     }
   }
 
+  /** 同一則訊息送給房裡每一條連線 */
+  private sendAll(message: string): void {
+    for (const ws of this.ctx.getWebSockets()) {
+      if (ws.readyState !== WebSocket.OPEN) continue
+      try {
+        ws.send(message)
+      } catch {
+        // 連線可能早就斷了
+      }
+    }
+  }
+
   private playerOf(ws: WebSocket): string | null {
     return this.ctx.getTags(ws)[0] ?? null
   }
@@ -220,6 +299,8 @@ export class GameRoom extends DurableObject<Env> {
 
   private async destroy(): Promise<void> {
     this.room = null
+    this.chat = []
+    this.recentChats.clear()
     this.alarmSet = false
     await this.ctx.storage.deleteAll()
   }

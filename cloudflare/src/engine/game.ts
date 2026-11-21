@@ -104,10 +104,22 @@ const updateSettings: Handler<'update_settings'> = (room, pid, a) => {
   requireLobby(room)
   const s = a.settings
   if (s.fan_big_eye && s.fan_yao_lai) throw new GameError('大眼賊和藥來只能擇一')
+  if (s.remote) {
+    // 遠端沒有實體角色卡，也沒有人能在現場統計票數
+    s.role_mode = 'random'
+    s.vote_mode = 'chips'
+  }
   if (s.first_player_id !== null && findPlayer(room, s.first_player_id) === undefined) {
     s.first_player_id = null
   }
   room.settings = s
+}
+
+/** 聊天室開關：房主在大廳或遊戲中都可以切換 */
+const setChat: Handler<'set_chat'> = (room, pid, a) => {
+  requireHost(room, pid)
+  if (!room.settings.remote) throw new GameError('只有遠端遊玩的房間有聊天室')
+  room.settings.chat = a.enabled
 }
 
 const kick: Handler<'kick'> = (room, pid, a) => {
@@ -608,6 +620,7 @@ const abortGame: Handler<'abort_game'> = (room, pid) => {
 const HANDLERS: { [K in ActionType]: Handler<K> } = {
   set_profile: setProfile,
   update_settings: updateSettings,
+  set_chat: setChat,
   kick,
   transfer_host: transferHost,
   leave,

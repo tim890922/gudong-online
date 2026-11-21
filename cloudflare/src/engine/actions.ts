@@ -6,6 +6,7 @@ import { ALL_ROLES, type Role } from './roles'
 export type Action =
   | { type: 'set_profile'; name: string | null; color: number | null }
   | { type: 'update_settings'; settings: Settings }
+  | { type: 'set_chat'; enabled: boolean }
   | { type: 'kick'; player_id: string }
   | { type: 'transfer_host'; player_id: string }
   | { type: 'leave' }
@@ -100,6 +101,8 @@ function settings(o: Obj, key: string): Settings {
   if (has('fan_mo_yao')) s.fan_mo_yao = bool(v, 'fan_mo_yao')
   s.first_player_id = optional(v, 'first_player_id', str)
   if (has('allow_history')) s.allow_history = bool(v, 'allow_history')
+  if (has('remote')) s.remote = bool(v, 'remote')
+  if (has('chat')) s.chat = bool(v, 'chat')
   return s
 }
 
@@ -110,6 +113,7 @@ const PARSERS: { [K in ActionType]: (o: Obj) => Extract<Action, { type: K }> } =
     color: optional(o, 'color', int),
   }),
   update_settings: (o) => ({ type: 'update_settings', settings: settings(o, 'settings') }),
+  set_chat: (o) => ({ type: 'set_chat', enabled: bool(o, 'enabled') }),
   kick: (o) => ({ type: 'kick', player_id: str(o, 'player_id') }),
   transfer_host: (o) => ({ type: 'transfer_host', player_id: str(o, 'player_id') }),
   leave: () => ({ type: 'leave' }),

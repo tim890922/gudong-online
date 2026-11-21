@@ -239,6 +239,52 @@ describe('WebSocket', () => {
     hws.ws.close()
   })
 
+  test('遠端房間的聊天室', async () => {
+    const host = await create()
+    const guest = await (await join_(host.code, '路人')).json()
+    const hws = await phone(host.code, host.token)
+    const gws = await phone(host.code, guest.token)
+    await hws.state((v) => v.players.every((p: Json) => p.connected))
+    const say = (p: Phone, text: unknown) => p.ws.send(JSON.stringify({ type: 'chat', text }))
+    const error = async (p: Phone) => (await p.next((m) => m.type === 'error')).message
+
+    // 面對面的房間沒有聊天室
+    say(gws, '哈囉')
+    expect(await error(gws)).toContain('沒有開放')
+
+    hws.act({ type: 'update_settings', settings: { remote: true } })
+    await gws.state((v) => v.settings.remote)
+    say(gws, '  大家\n好‮  ')
+    const msg = (await hws.next((m) => m.type === 'chat')).message
+    expect(msg).toMatchObject({ id: 1, player_id: guest.player_id, name: '路人', text: '大家 好' })
+    expect((await gws.next((m) => m.type === 'chat')).message.id).toBe(1)
+
+    say(gws, '   ')
+    expect(await error(gws)).toContain('空白')
+    say(gws, '字'.repeat(201))
+    expect(await error(gws)).toContain('200')
+    say(gws, 42)
+    expect(await error(gws)).toContain('空白')
+
+    // 洗版：10 秒內最多 5 則
+    for (let i = 0; i < 4; i++) say(gws, `第${i}則`)
+    say(gws, '第五則')
+    expect(await error(gws)).toContain('太頻繁')
+
+    // 重新連線時補上紀錄
+    const again = await phone(host.code, guest.token)
+    const history = (await again.next((m) => m.type === 'chat_history')).messages
+    expect(history.map((m: Json) => m.text)).toEqual(['大家 好', '第0則', '第1則', '第2則', '第3則'])
+
+    // 房主關掉聊天室
+    hws.act({ type: 'set_chat', enabled: false })
+    await hws.state((v) => v.settings.chat === false)
+    say(hws, '還在嗎')
+    expect(await error(hws)).toContain('沒有開放')
+
+    for (const p of [hws, gws, again]) p.ws.close()
+  })
+
   test('最後一個人離開，房間就消失', async () => {
     const host = await create()
     const hws = await phone(host.code, host.token)

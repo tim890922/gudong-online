@@ -75,6 +75,38 @@ def test_manual_roles_reject_duplicates_and_start_when_all_ready():
     assert t.g.turn is not None
 
 
+# ---------------------------------------------------------------- 遠端遊玩
+
+
+def test_remote_forces_random_roles_and_chip_votes():
+    t = Table(6)
+    t.room.game = None
+    t.act("p0", type="update_settings",
+          settings={"remote": True, "role_mode": "manual", "vote_mode": "host"})
+    s = t.room.settings
+    assert (s.remote, s.chat, s.role_mode, s.vote_mode) == (True, True, "random", "chips")
+    # 關掉之後恢復可以自由選
+    t.act("p0", type="update_settings",
+          settings={"remote": False, "role_mode": "manual", "vote_mode": "host"})
+    s = t.room.settings
+    assert (s.remote, s.role_mode, s.vote_mode) == (False, "manual", "host")
+
+
+def test_host_toggles_chat_during_game():
+    t = Table(6, remote=True)
+    assert t.g.stage == "roles"
+    assert "房主" in t.fails("p1", type="set_chat", enabled=False)
+    t.act("p0", type="set_chat", enabled=False)
+    assert t.room.settings.chat is False
+    t.act("p0", type="set_chat", enabled=True)
+    assert t.room.settings.chat is True
+
+
+def test_in_person_room_has_no_chat():
+    t = Table(6)
+    assert "遠端" in t.fails("p0", type="set_chat", enabled=True)
+
+
 # ---------------------------------------------------------------- 鑑定
 
 

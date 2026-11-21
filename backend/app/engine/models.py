@@ -25,6 +25,13 @@ class Settings(BaseModel):
     fan_mo_yao: bool = False
     first_player_id: str | None = None
     allow_history: bool = True
+    # 遠端遊玩：開放聊天室（之後還有語音），角色固定隨機發、投票固定線上籌碼
+    remote: bool = False
+    # 聊天室是否開放（只在遠端遊玩時有效）；房主隨時可以開關
+    chat: bool = True
+
+    def chat_open(self) -> bool:
+        return self.remote and self.chat
 
 
 class PlayerInfo(BaseModel):

@@ -115,6 +115,68 @@ def test_bad_token_is_rejected(client):
         assert msg["type"] == "removed"
 
 
+def recv_until(ws, pred):
+    while True:
+        msg = json.loads(ws.receive_text())
+        if pred(msg):
+            return msg
+
+
+def test_remote_room_chat(client):
+    host = create(client)
+    code = host["code"]
+    guest = join(client, code, "路人").json()
+
+    def say(ws, text):
+        ws.send_text(json.dumps({"type": "chat", "text": text}))
+
+    def error(ws):
+        return recv_until(ws, lambda m: m["type"] == "error")["message"]
+
+    def chat(ws):
+        return recv_until(ws, lambda m: m["type"] == "chat")["message"]
+
+    with client.websocket_connect(f"/ws/{code}?token={host['token']}") as hws, \
+            client.websocket_connect(f"/ws/{code}?token={guest['token']}") as gws:
+        # 面對面的房間沒有聊天室
+        say(gws, "哈囉")
+        assert "沒有開放" in error(gws)
+
+        hws.send_text(json.dumps({"type": "action", "action": {
+            "type": "update_settings", "settings": {"remote": True}}}))
+        recv_until(gws, lambda m: m["type"] == "state" and m["view"]["settings"]["remote"])
+        say(gws, "  大家\n好‮  ")
+        msg = chat(hws)
+        assert (msg["id"], msg["player_id"], msg["name"], msg["text"]) == (
+            1, guest["player_id"], "路人", "大家 好")
+        assert chat(gws)["id"] == 1
+
+        say(gws, "   ")
+        assert "空白" in error(gws)
+        say(gws, "字" * 201)
+        assert "200" in error(gws)
+        say(gws, 42)
+        assert "空白" in error(gws)
+
+        # 洗版：10 秒內最多 5 則
+        for i in range(4):
+            say(gws, f"第{i}則")
+        say(gws, "第五則")
+        assert "太頻繁" in error(gws)
+
+        # 重新連線時補上紀錄
+        with client.websocket_connect(f"/ws/{code}?token={guest['token']}") as again:
+            history = recv_until(again, lambda m: m["type"] == "chat_history")["messages"]
+            assert [m["text"] for m in history] == ["大家 好", "第0則", "第1則", "第2則", "第3則"]
+
+        # 房主關掉聊天室
+        hws.send_text(json.dumps({"type": "action", "action": {
+            "type": "set_chat", "enabled": False}}))
+        recv_until(hws, lambda m: m["type"] == "state" and m["view"]["settings"]["chat"] is False)
+        say(hws, "還在嗎")
+        assert "沒有開放" in error(hws)
+
+
 def test_room_survives_restart(settings):
     with TestClient(create_app(settings)) as c1:
         host = create(c1)

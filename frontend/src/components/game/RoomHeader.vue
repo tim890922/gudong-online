@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { BookOpen, EllipsisVertical, ScrollText, WifiOff } from 'lucide-vue-next'
+import { BookOpen, EllipsisVertical, MessageCircle, ScrollText, WifiOff } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 import { useRoomStore } from '../../stores/room'
 
-const emit = defineEmits<{ records: []; rules: []; abort: []; leave: [] }>()
+const emit = defineEmits<{ records: []; rules: []; chat: []; abort: []; leave: [] }>()
 const store = useRoomStore()
 const menu = ref(false)
 const inGame = computed(() => !!store.game)
+const unread = computed(() => (store.chatUnread > 9 ? '9+' : String(store.chatUnread)))
 
 const PHASE_TEXT: Record<string, string> = {
   lobby: '等待開始',
@@ -26,6 +27,21 @@ const PHASE_TEXT: Record<string, string> = {
       <span class="font-display text-2xl tracking-widest text-gilt">{{ store.view?.code }}</span>
       <span class="text-sm text-mist">{{ PHASE_TEXT[store.view?.phase ?? 'lobby'] }}</span>
       <span class="flex-1" />
+      <button
+        v-if="store.view?.settings.remote"
+        class="relative p-2 text-mist hover:text-paper"
+        :aria-label="store.chatUnread ? `聊天室，${store.chatUnread} 則未讀` : '聊天室'"
+        @click="emit('chat')"
+      >
+        <MessageCircle :size="22" />
+        <span
+          v-if="store.chatUnread"
+          class="absolute top-0.5 right-0 min-w-4.5 rounded-full bg-cinnabar px-1 text-center text-[11px] leading-4.5 font-medium text-paper"
+          aria-hidden="true"
+        >
+          {{ unread }}
+        </span>
+      </button>
       <button v-if="inGame && store.me" class="p-2 text-mist hover:text-paper" aria-label="我的紀錄" @click="emit('records')">
         <ScrollText :size="22" />
       </button>

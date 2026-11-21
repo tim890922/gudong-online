@@ -8,6 +8,7 @@
 import { BRANCHES, HEADS_PER_ROUND, MAX_POISON, ROUNDS, ZODIAC } from './constants'
 import { availableSkill, forbiddenTargets, headTargets, peopleVoteGoal, remainingPlayers } from './game'
 import {
+  defaultSettings,
   findPlayer,
   playerWith,
   type GameState,
@@ -32,7 +33,8 @@ export function buildView(room: Room, pid: string, connected: Set<string> = new 
       color: p.color,
       connected: connected.has(p.id),
     })),
-    settings: { ...room.settings },
+    // 舊的存檔可能少了後來新增的設定，補上預設值
+    settings: { ...defaultSettings(), ...room.settings },
     phase: g === null ? 'lobby' : g.stage,
     games_played: room.games_played,
     game: g === null ? null : gameView(room, g, pid),

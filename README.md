@@ -12,6 +12,7 @@
 - **角色分配**：房主可選「系統隨機發」或「輸入實體角色卡」
 - **鑑寶投票**：房主輸入總票數，或每人線上投籌碼（公開誰投給誰）
 - **粉絲角色**：大眼賊、藥來、劉局、魔藥不然
+- **遠端遊玩**：房主開啟後有房內聊天室（房主隨時可以開關），角色固定系統隨機發、投票固定線上籌碼；面對面的房間沒有聊天室。每房保留最近 100 則、每人 10 秒內最多 5 則
 - 輪到你時手機震動、遊戲中螢幕保持常亮（需 HTTPS）、可加到主畫面
 - **iOS／Android App**：同一份前端用 Capacitor 包成 App，連同一個伺服器，App 和網頁的玩家可以在同一房；App 多了掃 QR code 加入
 
@@ -114,7 +115,7 @@ npm run deploy
 npx wrangler tail                         # 看即時 log
 ```
 
-- 免費方案每天 10 萬次請求，Durable Object 另有每天 10 萬次寫入的額度。一局大約幾百次，同時開很多桌也用不完。前端的心跳由 Cloudflare 直接回覆，不吵醒 Durable Object，也不算額度。
+- 免費方案每天 10 萬次請求，Durable Object 另有每天 10 萬次寫入的額度。一局大約幾百次，同時開很多桌也用不完。前端的心跳由 Cloudflare 直接回覆，不吵醒 Durable Object，也不算額度。聊天每則訊息算一次寫入。
 - 房間閒置 12 小時（`wrangler.jsonc` 的 `ROOM_TTL_HOURS`）後由 alarm 清除。重新部署不會影響進行中的房間，連線會自動重連。
 - 要用自己的網域時，在 Cloudflare 後台幫 Worker 加 Custom Domain，並把 `PUBLIC_BASE_URL` 設成那個網址（影響邀請連結和 QR code）。App 版的 `frontend/.env.app` 也要一起改。
 
@@ -144,7 +145,7 @@ docker compose up -d --build      # http://localhost:8000
 docker compose logs -f app
 ```
 
-資料存在 `gudong-data` volume。只能跑單一 worker（房間狀態在記憶體裡），這個規模同時開好幾桌都沒問題。
+資料存在 `gudong-data` volume。只能跑單一 worker（房間狀態在記憶體裡），這個規模同時開好幾桌都沒問題。聊天紀錄只放在記憶體，重啟後會清空（房間本身不受影響）。
 
 ## 自架版對外公開（Cloudflare Tunnel）
 

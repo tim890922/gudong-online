@@ -108,9 +108,21 @@ def _update_settings(room: Room, pid: str, a: A.UpdateSettings, rng: random.Rand
     s = a.settings
     if s.fan_big_eye and s.fan_yao_lai:
         raise GameError("大眼賊和藥來只能擇一")
+    if s.remote:
+        # 遠端沒有實體角色卡，也沒有人能在現場統計票數
+        s.role_mode = "random"
+        s.vote_mode = "chips"
     if s.first_player_id is not None and room.player(s.first_player_id) is None:
         s.first_player_id = None
     room.settings = s
+
+
+def _set_chat(room: Room, pid: str, a: A.SetChat, rng: random.Random) -> None:
+    """聊天室開關：房主在大廳或遊戲中都可以切換。"""
+    _require_host(room, pid)
+    if not room.settings.remote:
+        raise GameError("只有遠端遊玩的房間有聊天室")
+    room.settings.chat = a.enabled
 
 
 def _kick(room: Room, pid: str, a: A.Kick, rng: random.Random) -> None:
@@ -561,6 +573,7 @@ def _abort_game(room: Room, pid: str, a: A.AbortGame, rng: random.Random) -> Non
 HANDLERS: dict[type, Handler] = {
     A.SetProfile: _set_profile,
     A.UpdateSettings: _update_settings,
+    A.SetChat: _set_chat,
     A.Kick: _kick,
     A.TransferHost: _transfer_host,
     A.Leave: _leave,

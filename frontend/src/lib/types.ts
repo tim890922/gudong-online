@@ -27,6 +27,20 @@ export interface Settings {
   fan_mo_yao: boolean
   first_player_id: string | null
   allow_history: boolean
+  /** 遠端遊玩：有聊天室，角色固定隨機發、投票固定線上籌碼 */
+  remote: boolean
+  /** 聊天室是否開放（房主可以隨時開關） */
+  chat: boolean
+}
+
+/** 聊天訊息；名字和顏色是發言當下的 */
+export interface ChatMessage {
+  id: number
+  player_id: string
+  name: string
+  color: number | null
+  text: string
+  ts: number
 }
 
 export interface PlayerView {

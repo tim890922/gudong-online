@@ -11,6 +11,7 @@ const SHOTS = process.env.E2E_SHOTS
 interface Options {
   chips?: boolean
   manual?: boolean
+  remote?: boolean
   prefix: string
 }
 
@@ -22,9 +23,32 @@ test('online chips with public allocations and manual role cards', async ({ brow
   await playGame(browser, { chips: true, manual: true, prefix: 'chips-' })
 })
 
+// 遠端遊玩會固定隨機發角色、線上籌碼投票
+test('remote play with chat room', async ({ browser }) => {
+  await playGame(browser, { remote: true, chips: true, prefix: 'remote-' })
+})
+
 async function newPhone(browser: Browser): Promise<Page> {
   const context = await browser.newContext()
   return context.newPage()
+}
+
+/** 房主發一則訊息，對方看到未讀數字、打開聊天室回覆，房主收到回覆 */
+async function chatRoundTrip(host: Page, guest: Page) {
+  await host.getByRole('button', { name: '聊天室', exact: true }).click()
+  const input = host.getByRole('textbox', { name: '聊天訊息' })
+  await input.fill('大家好，準備開始囉')
+  await input.press('Enter')
+  await expect(input).toHaveValue('')
+  await expect(host.getByText('大家好，準備開始囉')).toBeVisible()
+
+  await guest.getByRole('button', { name: '聊天室，1 則未讀' }).click()
+  await expect(guest.getByText('大家好，準備開始囉')).toBeVisible()
+  await guest.getByRole('textbox', { name: '聊天訊息' }).fill('收到')
+  await guest.getByRole('button', { name: '送出' }).click()
+  await expect(host.getByText('收到', { exact: true })).toBeVisible()
+
+  for (const p of [host, guest]) await p.getByRole('button', { name: '關閉' }).click()
 }
 
 function bottomButton(page: Page) {
@@ -59,7 +83,12 @@ async function playGame(browser: Browser, opts: Options) {
     await host.getByRole('radio', { name: '輸入實體卡' }).click()
     await expect(phones[1].getByText('玩家輸入實體角色卡')).toBeVisible()
   }
-  if (opts.chips) {
+  if (opts.remote) {
+    await host.getByText('遠端遊玩', { exact: true }).click()
+    await expect(phones[1].getByText(/遠端遊玩，聊天室開放中/)).toBeVisible()
+    await expect(phones[1].getByText(/每人線上投籌碼/)).toBeVisible()
+    await chatRoundTrip(host, phones[1])
+  } else if (opts.chips) {
     await host.getByRole('radio', { name: '每人線上投' }).click()
     await expect(phones[1].getByText(/每人線上投籌碼/)).toBeVisible()
   }

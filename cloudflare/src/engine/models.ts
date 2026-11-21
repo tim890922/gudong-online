@@ -19,6 +19,10 @@ export interface Settings {
   fan_mo_yao: boolean
   first_player_id: string | null
   allow_history: boolean
+  /** 遠端遊玩：開放聊天室（之後還有語音），角色固定隨機發、投票固定線上籌碼 */
+  remote: boolean
+  /** 聊天室是否開放（只在遠端遊玩時有效）；房主隨時可以開關 */
+  chat: boolean
 }
 
 export function defaultSettings(): Settings {
@@ -31,7 +35,14 @@ export function defaultSettings(): Settings {
     fan_mo_yao: false,
     first_player_id: null,
     allow_history: true,
+    remote: false,
+    chat: true,
   }
+}
+
+/** 現在可以在聊天室發言嗎？舊的存檔沒有這兩個欄位，視為面對面的房間。 */
+export function chatOpen(settings: Settings): boolean {
+  return settings.remote === true && settings.chat !== false
 }
 
 export interface PlayerInfo {

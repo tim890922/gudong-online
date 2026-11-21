@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import random
+import re
 import secrets
 import time
 from collections.abc import Callable
@@ -32,6 +33,13 @@ CODE_LENGTH = 4
 CLOSE_REMOVED = 4001
 CLOSE_UNKNOWN = 4004
 
+CHAT_KEEP = 100  # 每房只保留最近幾則
+CHAT_MAX_CHARS = 200
+CHAT_BURST = 5  # 每人在 CHAT_WINDOW_SECONDS 內最多幾則
+CHAT_WINDOW_SECONDS = 10
+# 控制字元，以及會反轉文字方向的字元（防止偽造顯示）
+_CHAT_STRIP = re.compile("[\x00-\x1f\x7f‎‏‪-‮⁦-⁩]")
+
 _ACTION = TypeAdapter(Action)
 
 
@@ -39,11 +47,21 @@ class RoomNotFound(Exception):
     pass
 
 
+def clean_chat(raw: Any) -> str:
+    """聊天只有一行：空白縮成一格，去掉控制字元。"""
+    if not isinstance(raw, str):
+        return ""
+    return _CHAT_STRIP.sub("", re.sub(r"\s+", " ", raw)).strip()
+
+
 @dataclass
 class LiveRoom:
     room: Room
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     sockets: dict[str, set[WebSocket]] = field(default_factory=dict)
+    # 聊天只放在記憶體：自架版重啟後聊天紀錄會清空，房間本身不受影響
+    chat: list[dict[str, Any]] = field(default_factory=list)
+    recent_chats: dict[str, list[float]] = field(default_factory=dict)
 
 
 class RoomManager:
@@ -173,6 +191,53 @@ class RoomManager:
             await self._close_player(lr, p, "你已離開房間")
         await self.broadcast(lr)
         return None
+
+    # ------------------------------------------------------------ 聊天
+
+    async def post_chat(self, lr: LiveRoom, pid: str, raw: Any) -> str | None:
+        """發一則聊天訊息，回傳錯誤訊息（成功則為 None）。"""
+        async with lr.lock:
+            player = lr.room.player(pid)
+            if player is None:
+                return "你已經不在這個房間"
+            if not lr.room.settings.chat_open():
+                return "聊天室沒有開放"
+            text = clean_chat(raw)
+            if not text:
+                return "訊息不能是空白"
+            if len(text) > CHAT_MAX_CHARS:
+                return f"訊息最多 {CHAT_MAX_CHARS} 個字"
+            now = self.clock()
+            recent = [t for t in lr.recent_chats.get(pid, []) if now - t < CHAT_WINDOW_SECONDS]
+            if len(recent) >= CHAT_BURST:
+                return "訊息太頻繁，請稍等一下"
+            lr.recent_chats[pid] = [*recent, now]
+            message = {
+                "id": (lr.chat[-1]["id"] if lr.chat else 0) + 1,
+                "player_id": pid,
+                "name": player.name,
+                "color": player.color,
+                "text": text,
+                "ts": int(now * 1000),
+            }
+            lr.chat = [*lr.chat, message][-CHAT_KEEP:]
+        await self.send_all(lr, {"type": "chat", "message": message})
+        return None
+
+    def chat_history(self, lr: LiveRoom) -> dict[str, Any] | None:
+        """遠端房間：連線時補上聊天紀錄。"""
+        if not lr.room.settings.remote:
+            return None
+        return {"type": "chat_history", "messages": lr.chat}
+
+    async def send_all(self, lr: LiveRoom, payload: dict[str, Any]) -> None:
+        message = json.dumps(payload, ensure_ascii=False)
+        for sockets in list(lr.sockets.values()):
+            for ws in list(sockets):
+                try:
+                    await ws.send_text(message)
+                except Exception:  # noqa: BLE001 — 連線可能早就斷了
+                    sockets.discard(ws)
 
     async def _close_player(self, lr: LiveRoom, pid: str, reason: str) -> None:
         for ws in list(lr.sockets.pop(pid, set())):

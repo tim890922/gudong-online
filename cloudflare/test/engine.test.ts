@@ -69,6 +69,43 @@ describe('開局', () => {
   })
 })
 
+// ---------------------------------------------------------------- 遠端遊玩
+
+describe('遠端遊玩', () => {
+  test('開啟後固定隨機發角色、線上籌碼投票', () => {
+    const t = new Table(6)
+    t.room.game = null
+    t.act('p0', { type: 'update_settings', settings: { remote: true, role_mode: 'manual', vote_mode: 'host' } })
+    expect(t.room.settings).toMatchObject({ remote: true, chat: true, role_mode: 'random', vote_mode: 'chips' })
+    // 關掉之後恢復可以自由選
+    t.act('p0', { type: 'update_settings', settings: { remote: false, role_mode: 'manual', vote_mode: 'host' } })
+    expect(t.room.settings).toMatchObject({ remote: false, role_mode: 'manual', vote_mode: 'host' })
+  })
+
+  test('房主在遊戲中也能開關聊天室', () => {
+    const t = new Table(6, null, { remote: true })
+    expect(t.g.stage).toBe('roles')
+    expect(t.fails('p1', { type: 'set_chat', enabled: false })).toContain('房主')
+    t.act('p0', { type: 'set_chat', enabled: false })
+    expect(t.room.settings.chat).toBe(false)
+    t.act('p0', { type: 'set_chat', enabled: true })
+    expect(t.room.settings.chat).toBe(true)
+  })
+
+  test('面對面的房間沒有聊天室', () => {
+    const t = new Table(6)
+    expect(t.fails('p0', { type: 'set_chat', enabled: true })).toContain('遠端')
+  })
+
+  test('view 會補上舊存檔沒有的設定', () => {
+    const t = new Table(6)
+    const old = t.room.settings as Partial<typeof t.room.settings>
+    delete old.remote
+    delete old.chat
+    expect(buildView(t.room, 'p0').settings).toMatchObject({ remote: false, chat: true })
+  })
+})
+
 // ---------------------------------------------------------------- 鑑定
 
 describe('鑑定', () => {

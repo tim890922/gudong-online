@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ActingScreen from '../components/game/ActingScreen.vue'
+import ChatPanel from '../components/game/ChatPanel.vue'
 import HoldToReveal from '../components/game/HoldToReveal.vue'
 import PeopleVoteScreen from '../components/game/PeopleVoteScreen.vue'
 import RecordsList from '../components/game/RecordsList.vue'
@@ -30,9 +31,19 @@ const needsJoin = ref(false)
 const joinError = ref('')
 const name = ref(savedName.get())
 const busy = ref(false)
-const sheet = ref<'records' | 'rules' | null>(null)
+const sheet = ref<'records' | 'rules' | 'chat' | null>(null)
 const confirmAbort = ref(false)
 const confirmLeave = ref(false)
+
+// 聊天室開著時，新訊息不算未讀
+watch(sheet, (s) => store.setChatVisible(s === 'chat'))
+// 房主關掉遠端遊玩時，順便收起聊天室
+watch(
+  () => store.view?.settings.remote,
+  (remote) => {
+    if (!remote && sheet.value === 'chat') sheet.value = null
+  },
+)
 
 async function enter() {
   needsJoin.value = false
@@ -129,6 +140,7 @@ const me = computed(() => store.me)
       <RoomHeader
         @records="sheet = 'records'"
         @rules="sheet = 'rules'"
+        @chat="sheet = 'chat'"
         @abort="confirmAbort = true"
         @leave="confirmLeave = true"
       />
@@ -165,6 +177,9 @@ const me = computed(() => store.me)
     </BottomSheet>
     <BottomSheet :open="sheet === 'rules'" title="規則速查" @close="sheet = null">
       <RulesContent />
+    </BottomSheet>
+    <BottomSheet :open="sheet === 'chat'" title="聊天室" @close="sheet = null">
+      <ChatPanel />
     </BottomSheet>
 
     <ConfirmModal :open="confirmAbort" title="中止這局" confirm-text="中止" @confirm="abort" @cancel="confirmAbort = false">

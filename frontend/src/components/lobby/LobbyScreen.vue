@@ -47,6 +47,11 @@ function update<K extends keyof Settings>(key: K, value: Settings[K]) {
   // 大眼賊和藥來都取代姬雲浮，只能擇一
   if (key === 'fan_big_eye' && value) next.fan_yao_lai = false
   if (key === 'fan_yao_lai' && value) next.fan_big_eye = false
+  // 遠端沒有實體角色卡、也沒人能在現場統計票數（伺服器也會強制）
+  if (key === 'remote' && value) {
+    next.role_mode = 'random'
+    next.vote_mode = 'chips'
+  }
   store.send({ type: 'update_settings', settings: next })
 }
 
@@ -72,6 +77,14 @@ const allowHistory = computed({
   get: () => settings.value.allow_history,
   set: (v: boolean) => update('allow_history', v),
 })
+const remote = computed({
+  get: () => settings.value.remote,
+  set: (v: boolean) => update('remote', v),
+})
+const chatOn = computed({
+  get: () => settings.value.chat,
+  set: (v: boolean) => update('chat', v),
+})
 
 const summary = computed(() => {
   const s = settings.value
@@ -82,6 +95,7 @@ const summary = computed(() => {
     s.fan_mo_yao && '魔藥不然',
   ].filter(Boolean)
   return [
+    ...(s.remote ? [s.chat ? '遠端遊玩，聊天室開放中（右上角）' : '遠端遊玩，聊天室已關閉'] : []),
     s.role_mode === 'random' ? '系統隨機發角色' : '玩家輸入實體角色卡',
     s.vote_mode === 'host' ? '房主輸入總票數' : '每人線上投籌碼（公開誰投給誰）',
     s.first_player_id ? `首家：${store.player(s.first_player_id)?.name}` : '首家隨機',
@@ -129,16 +143,23 @@ function doTransfer() {
           </template>
         </li>
       </ul>
-      <p class="mt-2 text-sm text-mist">顏色請對應桌上的座位指示物。點自己右邊的筆可以改暱稱和顏色。</p>
+      <p class="mt-2 text-sm text-mist">
+        <template v-if="!settings.remote">顏色請對應桌上的座位指示物。</template>點自己右邊的筆可以改暱稱和顏色。
+      </p>
     </section>
 
     <section v-if="store.isHost" class="space-y-4 rounded-2xl bg-ink-raised p-4">
       <h2 class="font-display text-2xl">房間設定</h2>
+      <div class="divide-y divide-ink-line">
+        <ToggleRow v-model="remote" label="遠端遊玩" hint="不在同一個地方玩：開放聊天室，角色由系統隨機發、每人線上投票" />
+        <ToggleRow v-if="settings.remote" v-model="chatOn" label="開放聊天室" hint="遊戲中也可以從右上角的聊天室開關" />
+      </div>
       <div>
         <p class="mb-2 text-sm text-mist">角色分配</p>
         <SegmentedControl
           v-model="roleMode"
           label="角色分配"
+          :disabled="settings.remote"
           :options="[
             { value: 'random', label: '系統隨機發' },
             { value: 'manual', label: '輸入實體卡' },
@@ -150,6 +171,7 @@ function doTransfer() {
         <SegmentedControl
           v-model="voteMode"
           label="鑑寶投票"
+          :disabled="settings.remote"
           :options="[
             { value: 'host', label: '房主輸入總票數' },
             { value: 'chips', label: '每人線上投' },

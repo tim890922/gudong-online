@@ -133,6 +133,38 @@ describe('REST', () => {
     expect((await get('/api/nothing')).status).toBe(404)
     expect((await get('/api/rooms')).status).toBe(405)
   })
+
+  test('App 的來源可以跨來源呼叫，其他網站不行', async () => {
+    const preflight = (origin: string) =>
+      fetch(new URL('/api/rooms', base), {
+        method: 'OPTIONS',
+        headers: { Origin: origin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type' },
+      })
+
+    for (const origin of ['capacitor://localhost', 'https://localhost']) {
+      const pre = await preflight(origin)
+      expect(pre.status).toBe(204)
+      expect(pre.headers.get('Access-Control-Allow-Origin')).toBe(origin)
+      expect(pre.headers.get('Access-Control-Allow-Methods')).toContain('POST')
+      expect(pre.headers.get('Access-Control-Allow-Headers')).toContain('Content-Type')
+
+      const r = await fetch(new URL('/api/rooms', base), {
+        method: 'POST',
+        headers: { Origin: origin, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'App 玩家' }),
+      })
+      expect(r.status).toBe(200)
+      expect(r.headers.get('Access-Control-Allow-Origin')).toBe(origin)
+      expect(r.headers.get('Vary')).toContain('Origin')
+    }
+
+    const evil = 'https://evil.example'
+    expect((await preflight(evil)).status).toBe(405)
+    expect((await preflight(evil)).headers.get('Access-Control-Allow-Origin')).toBeNull()
+    const r = await fetch(new URL('/api/meta', base), { headers: { Origin: evil } })
+    expect(r.status).toBe(200)
+    expect(r.headers.get('Access-Control-Allow-Origin')).toBeNull()
+  })
 })
 
 describe('WebSocket', () => {

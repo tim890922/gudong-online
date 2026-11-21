@@ -21,7 +21,7 @@ const PHASE_TEXT: Record<string, string> = {
 </script>
 
 <template>
-  <header class="sticky top-0 z-30 border-b border-ink-line bg-ink/95 backdrop-blur">
+  <header class="sticky top-[env(safe-area-inset-top)] z-30 border-b border-ink-line bg-ink/95 backdrop-blur">
     <div class="mx-auto flex h-14 max-w-lg items-center gap-2 px-4">
       <span class="font-display text-2xl tracking-widest text-gilt">{{ store.view?.code }}</span>
       <span class="text-sm text-mist">{{ PHASE_TEXT[store.view?.phase ?? 'lobby'] }}</span>

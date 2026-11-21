@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { api } from '../lib/api'
 import { clearCredentials } from '../lib/credentials'
+import { onForeground, wsUrl } from '../lib/platform'
 import type { Credentials, Meta, PlayerView, RoomView } from '../lib/types'
 
 type Status = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'removed'
@@ -48,8 +49,7 @@ export const useRoomStore = defineStore('room', () => {
   function open() {
     if (!cred) return
     window.clearTimeout(retryTimer)
-    const scheme = location.protocol === 'https:' ? 'wss' : 'ws'
-    const url = `${scheme}://${location.host}/ws/${cred.code}?token=${encodeURIComponent(cred.token)}`
+    const url = wsUrl(`/ws/${cred.code}?token=${encodeURIComponent(cred.token)}`)
     status.value = retry === 0 && !view.value ? 'connecting' : 'reconnecting'
     const ws = new WebSocket(url)
     socket = ws
@@ -114,8 +114,8 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   // 手機從背景回來時立刻重連，不等退避計時器
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && cred && socket?.readyState !== WebSocket.OPEN) {
+  onForeground(() => {
+    if (cred && socket?.readyState !== WebSocket.OPEN) {
       retry = 0
       open()
     }

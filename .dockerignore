@@ -7,6 +7,10 @@ data
 **/.pytest_cache
 **/.ruff_cache
 frontend/dist
+frontend/dist-app
+frontend/ios
+frontend/android
+frontend/assets
 frontend/test-results
 frontend/playwright-report
 backend/data
